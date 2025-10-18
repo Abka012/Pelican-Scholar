@@ -20,7 +20,7 @@ A smart, AI-powered note-taking application designed to help you capture, organi
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/Pelican-Scholar.git
-cd Pelican-Ccholar
+cd Pelican-Scholar
 
 # Install dependencies
 npm install
