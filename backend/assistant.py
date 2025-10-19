@@ -4,63 +4,85 @@ import argparse
 import subprocess
 import json
 import tempfile
-import datetime 
+import datetime
 from pathlib import Path
-import re 
+import re
 from typing import List, Dict, Any
 import requests
-import PyPDF2 
+import PyPDF2
 import docx
 import whisper
-from transformers import pipeline 
+from transformers import pipeline
 import tkinter as tk
 from tkinter import filedialog
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 
+HEADLESS = os.environ.get("DISPLAY") is None or os.environ.get("RENDER") == "true"
+
 load_dotenv()
 
-client = InferenceClient(
-    provider="hf-inference",
-    api_key=os.getenv("HF_TOKEN")
-)
+client = InferenceClient(provider="hf-inference", api_key=os.getenv("HF_TOKEN"))
 
 # ----------------------------------- Utility functions -------------------------------------------------
 
+
 def ensure_ffmpeg_avaliable():
     try:
-        subprocess.run(['ffmpeg', '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        subprocess.run(
+            ["ffmpeg", "-version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
     except Exception as e:
-        raise RuntimeError('ffmpeg not found') from e
+        raise RuntimeError("ffmpeg not found") from e
+
 
 def extract_audio(video_path: str, out_audio: str):
     ensure_ffmpeg_avaliable()
     cmd = [
-        "ffmpeg", "-y", "-i", str(video_path),
-        "-vn", "acodec", "pm_s16le", "-ar", "16000", "-ac", "1", str(out_audio)
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-vn",
+        "acodec",
+        "pm_s16le",
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        str(out_audio),
     ]
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    subprocess.run(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+    )
     return out_audio
+
 
 def read_pdf_text(path: str) -> str:
     text = ""
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         for page in reader.pages:
             text += page.extract_text() or ""
     return text
 
+
 def read_docx_text(path: str) -> str:
     doc = docx.Document(path)
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
 
 def read_text_file(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         return f.read()
 
+
 def chunck_text(text: str, max_chars: int = 3000):
     text = text.strip()
-    paragraphs = re.split(r'\n\s*\n', text)
+    paragraphs = re.split(r"\n\s*\n", text)
     chuncks, current = [], ""
 
     for p in paragraphs:
@@ -74,6 +96,7 @@ def chunck_text(text: str, max_chars: int = 3000):
         chuncks.append(current)
     return chuncks
 
+
 def format_timestap(seconds: float) -> str:
     ms = int((seconds - int(seconds)) * 1000)
     s = int(seconds) % 60
@@ -81,12 +104,15 @@ def format_timestap(seconds: float) -> str:
     h = int(seconds) // 3600
     return f"{h}:{m:02d}:{s:02d}.{ms:03d}"
 
+
 # --------------------------------------------- Transcription ----------------------------------------------------
+
 
 def transcribe_locally(audio_path: str, model: str = "small") -> Dict[str, Any]:
     wmodel = whisper.load_model(model)
     results = wmodel.transcribe(audio_path)
     return {"text": results.get("text", ""), "raw": results}
+
 
 # --------------------------------------------- Summarization ----------------------------------------------------
 
@@ -110,6 +136,7 @@ def transcribe_locally(audio_path: str, model: str = "small") -> Dict[str, Any]:
     except Exception:
         return json.dumps(data, indent=2)"""
 
+
 def summarize_text(text: str) -> str:
     result = client.summarization(
         text,
@@ -117,13 +144,19 @@ def summarize_text(text: str) -> str:
     )
     return result
 
+
 def summarize_with_transformers(text: str) -> str:
     summerizer = pipeline("summerization")
     chuncks = chunck_text(text, max_chars=1500)
-    results = [summerizer(c, max_length=150, min_length=40, do_sample=False)[0]['summary_text'] for c in chuncks]
+    results = [
+        summerizer(c, max_length=150, min_length=40, do_sample=False)[0]["summary_text"]
+        for c in chuncks
+    ]
     return " ".join(results)
 
+
 # ------------------------------------------------ Processing Logic -------------------------------------------------
+
 
 def process_document(path: str) -> Dict[str, Any]:
     ext = Path(path).suffix.lower()
@@ -145,8 +178,9 @@ def process_document(path: str) -> Dict[str, Any]:
 
     return {"type": "document", "input": path, "final_summary": final}
 
+
 def process_video(path: str, lang: str = "en") -> Dict[str, Any]:
-    tmpdir =tempfile.mkdtemp(prefix="vid_")
+    tmpdir = tempfile.mkdtemp(prefix="vid_")
     audio = os.path.join(tmpdir, "audio.wav")
     extract_audio(path, audio)
 
@@ -162,35 +196,33 @@ def process_video(path: str, lang: str = "en") -> Dict[str, Any]:
     final = summarize_text(combined)
     return {"type": "video", "input": path, "transcript": text, "final_summary": final}
 
+
 # ------------------------------------------------- CLI -------------------------------------------------------------
 
-def select_file():
-    if tk is None:
-        raise RuntimeError("tkinter not avaliable for file selection.")
-    root = tk.TK()
-    root.withdraw()
-    file_path = filedialog.askopenfile(
-        title = "Select a video or document",
-        filetypes = [("Supported files", "*.mp4 *.mkv *.mov *.pdf *.docx *.txt"), ("All files", "*.*")]
-    )
-    root.destroy()
-    return file_path
 
 def select_file():
+    if HEADLESS:
+        print("Running in headless mode — GUI file picker disabled.")
+        return None  # User must pass --input instead
+
+    # Otherwise use tkinter for local selection
     root = tk.Tk()
-    root.withdraw()  
+    root.withdraw()
     file_path = filedialog.askopenfilename(
         title="Select a video or document",
         filetypes=[
             ("All Supported", "*.mp4 *.mkv *.mov *.pdf *.txt *.docx"),
             ("Videos", "*.mp4 *.mkv *.mov"),
-            ("Documents", "*.pdf *.txt *.docx")
-        ]
+            ("Documents", "*.pdf *.txt *.docx"),
+        ],
     )
     return file_path
 
+
 def main():
-    parser = argparse.ArgumentParser(description="AI assistant that summarizes videos or documents.")
+    parser = argparse.ArgumentParser(
+        description="AI assistant that summarizes videos or documents."
+    )
     parser.add_argument("--input", "-i", help="Input file path")
     parser.add_argument("--type", "-t", choices=["video", "document"])
     parser.add_argument("--lang", default="en", help="Language for Transcription")
@@ -215,11 +247,11 @@ def main():
     out_path = Path(args.outdir) / f"{Path(args.input).stem}_{ts}_summary.json"
 
     try:
-        if args.type == 'video':
+        if args.type == "video":
             extracted_text = process_video(args.input, lang=args.lang)
             result = {"final_summary": summarize_text(extracted_text)}
         else:
-            extracted_text =process_document(args.input)
+            extracted_text = process_document(args.input)
             result = {"final_summary": summarize_text(extracted_text)}
     except Exception as e:
         print("Error: ", e)
@@ -232,5 +264,6 @@ def main():
     print(result["final_summary"])
     print(f"\nSaved to: {out_path}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
