@@ -13,12 +13,12 @@ import PyPDF2
 import docx
 import whisper
 from transformers import pipeline
-import tkinter as tk
-from tkinter import filedialog
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 
+# -------------------- Headless Detection --------------------
 HEADLESS = os.environ.get("DISPLAY") is None or os.environ.get("RENDER") == "true"
+print(f"Headless mode detected: {HEADLESS}")
 
 load_dotenv()
 
@@ -116,26 +116,6 @@ def transcribe_locally(audio_path: str, model: str = "small") -> Dict[str, Any]:
 
 # --------------------------------------------- Summarization ----------------------------------------------------
 
-"""def summarize_with_gemini(text: str, system_prompt: str = None, model: str = "gemini-2.5-flash") -> str: 
-    api_key = os.getenv("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-    prompt = system_prompt or "You are an assistant that summarizes text clearly and concisely."
-    body = {
-        "contents": [
-            {"parts": [{"text": f"{prompt}\n\nText to summarize:\n{text}"}]}
-        ]
-    }
-    resp = requests.post(url, headers=headers, json=body)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text}")
-    
-    data = resp.json()
-    try:
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception:
-        return json.dumps(data, indent=2)"""
-
 
 def summarize_text(text: str) -> str:
     result = client.summarization(
@@ -175,7 +155,6 @@ def process_document(path: str) -> Dict[str, Any]:
 
     combined = "\n\n".join(summaries)
     final = summarize_text(combined)
-
     return {"type": "document", "input": path, "final_summary": final}
 
 
@@ -205,7 +184,10 @@ def select_file():
         print("Running in headless mode — GUI file picker disabled.")
         return None  # User must pass --input instead
 
-    # Otherwise use tkinter for local selection
+    # Local import of Tkinter only if not headless
+    import tkinter as tk
+    from tkinter import filedialog
+
     root = tk.Tk()
     root.withdraw()
     file_path = filedialog.askopenfilename(
@@ -229,9 +211,9 @@ def main():
     parser.add_argument("--outdir", default="outputs", help="Output folder")
     args = parser.parse_args()
 
+    # Headless-safe input
     if not args.input:
         if HEADLESS:
-            # Default file in repo for headless deployment
             args.input = "samples/sample.pdf"
             args.type = "document"
             print(f"Headless mode: using default input file: {args.input}")
@@ -241,6 +223,7 @@ def main():
                 print("No file selected. Exiting.")
                 sys.exit(1)
 
+    # Auto-detect type if not provided
     if not args.type:
         ext = Path(args.input).suffix.lower()
         if ext in [".mp4", ".mkv", ".mov"]:
@@ -273,3 +256,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
