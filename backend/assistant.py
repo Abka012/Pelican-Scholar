@@ -230,10 +230,16 @@ def main():
     args = parser.parse_args()
 
     if not args.input:
-        args.input = select_file()
-        if not args.input:
-            print("No file selected. Existing.")
-            sys.exit(1)
+        if HEADLESS:
+            # Default file in repo for headless deployment
+            args.input = "samples/sample.pdf"
+            args.type = "document"
+            print(f"Headless mode: using default input file: {args.input}")
+        else:
+            args.input = select_file()
+            if not args.input:
+                print("No file selected. Exiting.")
+                sys.exit(1)
 
     if not args.type:
         ext = Path(args.input).suffix.lower()

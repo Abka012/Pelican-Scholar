@@ -1,21 +1,18 @@
-
-# Use an official Python base image
+# Use slim Python
 FROM python:3.10-slim
 
-# Set working directory inside the container
 WORKDIR /app
 
-# Install system dependencies (ffmpeg for audio extraction, git for huggingface)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
-    tk \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project files into the container
+# Copy project files
 COPY . /app
 
-# Upgrade pip and install dependencies
+# Upgrade pip
 RUN pip install --upgrade pip
 
 # Install Python dependencies
@@ -27,15 +24,10 @@ RUN pip install \
     transformers \
     torch \
     requests \
-    huggingface_hub \
-    tk \
-    pillow
+    huggingface_hub
 
-# (Optional) If summarization model requires additional dependencies
-# RUN pip install accelerate
-
-# Ensure the .env file can be read (you’ll mount it at runtime)
+# Set env variable for unbuffered output
 ENV PYTHONUNBUFFERED=1
 
-# Default command (you can override with docker run arguments)
+# Default entrypoint
 ENTRYPOINT ["python", "assistant.py"]
