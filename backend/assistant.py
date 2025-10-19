@@ -66,15 +66,59 @@ def chunck_text(text: str, max_chars: int = 3000):
     return chuncks
 
 
-def summarize_text(text: str) -> str:
+def summarize_with_transformers(text: str, max_length: int = 600) -> str:
+    """Improved summarization with adjustable length"""
     try:
+        summarizer = pipeline("summarization")
+
+        # Handle longer texts by chunking properly
+        words = text.split()
+        if len(words) <= 800:
+            return summarizer(
+                text, max_length=max_length, min_length=150, do_sample=False
+            )[0]["summary_text"]
+
+        # For longer texts, chunk and summarize recursively
+        chunk_size = 600
+        chunks = [
+            " ".join(words[i : i + chunk_size])
+            for i in range(0, len(words), chunk_size)
+        ]
+
+        summaries = []
+        for chunk in chunks:
+            if len(chunk.split()) > 100:  # Only summarize substantial chunks
+                summary = summarizer(
+                    chunk, max_length=200, min_length=80, do_sample=False
+                )[0]["summary_text"]
+                summaries.append(summary)
+            else:
+                summaries.append(chunk)
+
+        combined = " ".join(summaries)
+        # Final summary if still too long
+        if len(combined.split()) > 300:
+            return summarizer(
+                combined, max_length=max_length, min_length=150, do_sample=False
+            )[0]["summary_text"]
+        return combined
+    except Exception as e:
+        return f"Error in transformer summarization: {str(e)}"
+
+
+def summarize_text(text: str) -> str:
+    """Main summarization function with fallback options"""
+    try:
+        # Try Hugging Face inference first
         result = client.summarization(
             text,
             model="Falconsai/text_summarization",
         )
         return result
     except Exception as e:
-        return f"Error summarizing: {str(e)}"
+        # Fallback to local transformers
+        print(f"Hugging Face API failed, falling back to local model: {e}")
+        return summarize_with_transformers(text, max_length=600)
 
 
 # -------------------- API endpoints ------------------
@@ -89,6 +133,11 @@ def summarize_file():
         uploaded_file = request.files["file"]
         if uploaded_file.filename == "":
             return jsonify({"error": "No file selected"}), 400
+
+        # Get optional parameters
+        summary_length = request.form.get("summary_length", "medium")
+        length_map = {"short": 300, "medium": 600, "long": 900}
+        max_length = length_map.get(summary_length, 600)
 
         ext = Path(uploaded_file.filename).suffix.lower()
         tmpdir = tempfile.mkdtemp()
@@ -106,15 +155,33 @@ def summarize_file():
         if not text.strip():
             return jsonify({"error": "No text found in the file"}), 400
 
-        chuncks = chunck_text(text)
-        summaries = [summarize_text(c) for c in chuncks]
-        final_summary = summarize_text("\n\n".join(summaries))
+        # Process text in chunks for better summarization
+        chunks = chunck_text(text)
+
+        # Summarize each chunk with appropriate length
+        chunk_summaries = []
+        for chunk in chunks:
+            # Use shorter length for individual chunks, longer for final
+            chunk_summary = summarize_with_transformers(chunk, max_length=400)
+            chunk_summaries.append(chunk_summary)
+
+        # Combine and create final summary
+        combined_summary = "\n\n".join(chunk_summaries)
+        final_summary = summarize_with_transformers(
+            combined_summary, max_length=max_length
+        )
+
+        # Clean up temporary file
+        os.remove(file_path)
+        os.rmdir(tmpdir)
 
         return jsonify(
             {
                 "filename": uploaded_file.filename,
                 "final_summary": final_summary,
                 "text_length": len(text),
+                "summary_length": len(final_summary.split()),
+                "summary_type": summary_length,
             }
         )
 
@@ -141,7 +208,7 @@ def health():
 @app.route("/api/notes", methods=["GET"])
 def get_all_notes():
     # Return your notes data
-    return jsonify(data)
+    return jsonify({"message": "Notes endpoint - implement your logic here"})
 
 
 @app.route("/api/notes", methods=["POST"])
