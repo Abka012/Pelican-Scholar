@@ -21,15 +21,23 @@ function App() {
   }, []);
 
   const fetchNotes = async () => {
-    try {
-      const data = await getNotes();
+  try {
+    const data = await getNotes();
+    // Ensure data is an array
+    if (Array.isArray(data)) {
       setNotes(data);
-      setLoading(false);
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
+    } else {
+      console.error('API returned non-array notes:', data);
+      setNotes([]);
     }
-  };
+    setLoading(false);
+  } catch (err) {
+    console.error('Failed to load notes:', err);
+    setError(err.message);
+    setNotes([]); // fallback to empty array
+    setLoading(false);
+  }
+};
 
   // ---------- File Upload ----------
   const handleFileUpload = async (file, summaryLength = 'medium') => {

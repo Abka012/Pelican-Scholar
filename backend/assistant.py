@@ -27,6 +27,8 @@ app.config["SECRET_KEY"] = os.getenv(
 )
 app.config["WTF_CSRF_ENABLED"] = False  # Disable CSRF for API usage
 
+CORS(app, origins="*")
+
 # Allow CORS for Vercel frontend + local dev
 CORS(
     app,
@@ -35,6 +37,8 @@ CORS(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
+    allow_headers=["Content-Type"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 )
 
 
@@ -214,7 +218,22 @@ def health():
 
 @app.route("/api/notes", methods=["GET"])
 def get_all_notes():
-    return jsonify({"message": "Notes endpoint - implement your logic here"})
+    return jsonify(
+        [
+            {
+                "id": 1,
+                "title": "Welcome",
+                "content": "Your first note!",
+                "createdAt": "2025-10-19T00:00:00Z",
+            },
+            {
+                "id": 2,
+                "title": "AI Summary",
+                "content": "This is a summary...",
+                "createdAt": "2025-10-19T01:00:00Z",
+            },
+        ]
+    )
 
 
 @app.route("/api/notes", methods=["POST"])
@@ -237,4 +256,3 @@ def delete_note(id):
 # -------------------- Run server ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
-
