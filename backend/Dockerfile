@@ -18,22 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # -------------------- Set working directory --------------------
 WORKDIR /app
 
-# -------------------- Copy files --------------------
+# -------------------- Copy requirements and install dependencies --------------------
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
+
+# -------------------- Copy application files --------------------
 COPY . /app
 
-# -------------------- Install Python dependencies --------------------
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir \
-        flask \
-        flask-cors \
-        python-dotenv \
-        PyPDF2 \
-        python-docx \
-        transformers \
-        torch \
-        whisper \
-        huggingface-hub \
-        requests
 # -------------------- Expose port --------------------
 EXPOSE 8000
 
