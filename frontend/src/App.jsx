@@ -9,8 +9,7 @@ function App() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Add missing states
+  const [summaryLength, setSummaryLength] = useState('medium');
   const [editingNote, setEditingNote] = useState(null);
   const [selectedNote, setSelectedNote] = useState(null);
   const [currentPage, setCurrentPage] = useState('home');
@@ -33,23 +32,21 @@ function App() {
   };
 
   // ---------- File Upload ----------
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      try {
-        const result = await summarizeFile(file);
-        const newNote = {
-          title: `Summary: ${result.filename}`,
-          content: result.final_summary,
-          createdAt: new Date().toISOString(),
-        };
-        const createdNote = await createNote(newNote);
-        setNotes(prev => [createdNote, ...prev]);
-        event.target.value = '';
-      } catch (error) {
-        console.error('Error summarizing file:', error);
-        alert('Error summarizing file: ' + error.message);
-      }
+  const handleFileUpload = async (file, summaryLength = 'medium') => {
+    if (!file) return;
+
+    try {
+      const result = await summarizeFile(file, summaryLength); // ← sends file + summaryLength
+      const newNote = {
+        title: `Summary: ${result.filename}`,
+        content: result.final_summary,
+        createdAt: new Date().toISOString(),
+      };
+      const createdNote = await createNote(newNote);
+      setNotes(prev => [createdNote, ...prev]);
+    } catch (error) {
+      console.error('Error summarizing file:', error);
+      alert('Error summarizing file: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -124,6 +121,19 @@ function App() {
   };
 
   // ---------- Conditional render ----------
+  if (loading) {
+    return <div className="App">Loading your notes...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="App">
+        <p style={{ color: 'red' }}>Failed to load notes: {error}</p>
+        <button onClick={fetchNotes}>Retry</button>
+      </div>
+    );
+  }
+
   if (currentPage === 'notes') {
     return (
       <Notes 
@@ -145,6 +155,9 @@ function App() {
         onToggleAI={toggleAI}
         onGenerateNote={handleGenerateNote}
         onSuggestTitle={handleSuggestTitle}
+        onFileUpload={handleFileUpload}       
+        summaryLength={summaryLength}         
+        setSummaryLength={setSummaryLength}
       />
     </div>
   );

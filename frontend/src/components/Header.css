@@ -55,3 +55,21 @@
 .btn:active {
   transform: translateY(0);
 }
+
+.summary-select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.file-upload-label {
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+.file-upload-label .btn {
+  /* Reuse your existing .btn styles */
+}

@@ -139,26 +139,22 @@ export const deleteNote = async (id) => {
 };
 
 // New function for file summarization
-export const summarizeFile = async (file) => {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await fetch(`${API_BASE_URL}/summarize`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error summarizing file:', error);
-    throw error;
+export const summarizeFile = async (file, summaryLength = 'medium') => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('summary_length', summaryLength); // ← crucial for Flask-WTF
+
+  const response = await fetch('/api/summarize', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to summarize');
   }
+
+  return await response.json();
 };
 
 // Keep the original mock functions for backward compatibility
