@@ -138,20 +138,28 @@ export const deleteNote = async (id) => {
   }
 };
 
-// New function for file summarization
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 export const summarizeFile = async (file, summaryLength = 'medium') => {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('summary_length', summaryLength); // ← crucial for Flask-WTF
+  formData.append('summary_length', summaryLength);
 
-  const response = await fetch('/api/summarize', {
+  const response = await fetch(`${API_BASE}/api/summarize`, {
     method: 'POST',
     body: formData,
   });
 
+  // Safety check for non-JSON responses
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Server returned non-JSON response: ${text.substring(0, 150)}...`);
+  }
+
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.error || 'Failed to summarize');
+    throw new Error(errorData.error || 'Unknown error');
   }
 
   return await response.json();
