@@ -98,6 +98,19 @@ def summarize_file():
     return jsonify({"filename": uploaded_file.filename, "final_summary": final_summary})
 
 
+# -------------------- Root & Health endpoints ----------------------
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return "Pelican Scholar API is running! Use POST /api/summarize to summarize files."
+
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "message": "API is running"})
+
+
 # -------------------- Run server -------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
