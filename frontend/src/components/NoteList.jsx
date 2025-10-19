@@ -1,3 +1,4 @@
+// Copy of Code
 import React from 'react';
 import './NoteList.css';
 
