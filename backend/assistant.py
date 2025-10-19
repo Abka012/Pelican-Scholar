@@ -1,14 +1,10 @@
 import os
-import sys
-import argparse
-import subprocess
 import json
 import tempfile
 import datetime
 from pathlib import Path
-import re
-from typing import List, Dict, Any
-import requests
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import PyPDF2
 import docx
 import whisper
@@ -16,49 +12,19 @@ from transformers import pipeline
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 
-# -------------------- Headless Detection --------------------
-HEADLESS = os.environ.get("DISPLAY") is None or os.environ.get("RENDER") == "true"
-print(f"Headless mode detected: {HEADLESS}")
-
+# -------------------- Load environment --------------------
 load_dotenv()
-
 client = InferenceClient(provider="hf-inference", api_key=os.getenv("HF_TOKEN"))
 
-# ----------------------------------- Utility functions -------------------------------------------------
+# -------------------- Flask app --------------------------
+app = Flask(__name__)
 
+# Allow CORS for Vercel frontend + local dev
+CORS(
+    app, origins=["https://https://pelican-scholar.vercel.app", "http://localhost:3000"]
+)
 
-def ensure_ffmpeg_avaliable():
-    try:
-        subprocess.run(
-            ["ffmpeg", "-version"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True,
-        )
-    except Exception as e:
-        raise RuntimeError("ffmpeg not found") from e
-
-
-def extract_audio(video_path: str, out_audio: str):
-    ensure_ffmpeg_avaliable()
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        str(video_path),
-        "-vn",
-        "acodec",
-        "pm_s16le",
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        str(out_audio),
-    ]
-    subprocess.run(
-        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
-    )
-    return out_audio
+# -------------------- Utility functions ------------------
 
 
 def read_pdf_text(path: str) -> str:
@@ -82,39 +48,17 @@ def read_text_file(path: str) -> str:
 
 def chunck_text(text: str, max_chars: int = 3000):
     text = text.strip()
-    paragraphs = re.split(r"\n\s*\n", text)
+    paragraphs = text.split("\n\n")
     chuncks, current = [], ""
-
     for p in paragraphs:
         if len(current) + len(p) < max_chars:
             current += ("\n\n" if current else "") + p
         else:
             chuncks.append(current)
             current = p
-
     if current:
         chuncks.append(current)
     return chuncks
-
-
-def format_timestap(seconds: float) -> str:
-    ms = int((seconds - int(seconds)) * 1000)
-    s = int(seconds) % 60
-    m = (int(seconds) // 60) % 60
-    h = int(seconds) // 3600
-    return f"{h}:{m:02d}:{s:02d}.{ms:03d}"
-
-
-# --------------------------------------------- Transcription ----------------------------------------------------
-
-
-def transcribe_locally(audio_path: str, model: str = "small") -> Dict[str, Any]:
-    wmodel = whisper.load_model(model)
-    results = wmodel.transcribe(audio_path)
-    return {"text": results.get("text", ""), "raw": results}
-
-
-# --------------------------------------------- Summarization ----------------------------------------------------
 
 
 def summarize_text(text: str) -> str:
@@ -125,135 +69,35 @@ def summarize_text(text: str) -> str:
     return result
 
 
-def summarize_with_transformers(text: str) -> str:
-    summerizer = pipeline("summerization")
-    chuncks = chunck_text(text, max_chars=1500)
-    results = [
-        summerizer(c, max_length=150, min_length=40, do_sample=False)[0]["summary_text"]
-        for c in chuncks
-    ]
-    return " ".join(results)
+# -------------------- API endpoints ----------------------
 
 
-# ------------------------------------------------ Processing Logic -------------------------------------------------
+@app.route("/api/summarize", methods=["POST"])
+def summarize_file():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
 
+    uploaded_file = request.files["file"]
+    ext = Path(uploaded_file.filename).suffix.lower()
+    tmpdir = tempfile.mkdtemp()
+    file_path = Path(tmpdir) / uploaded_file.filename
+    uploaded_file.save(file_path)
 
-def process_document(path: str) -> Dict[str, Any]:
-    ext = Path(path).suffix.lower()
+    # Read file content
     if ext == ".pdf":
-        text = read_pdf_text(path)
+        text = read_pdf_text(file_path)
     elif ext == ".docx":
-        text = read_docx_text(path)
+        text = read_docx_text(file_path)
     else:
-        text = read_text_file(path)
+        text = read_text_file(file_path)
 
     chuncks = chunck_text(text)
-    summaries = []
-    for c in chuncks:
-        s = summarize_text(c)
-        summaries.append(s)
+    summaries = [summarize_text(c) for c in chuncks]
+    final_summary = summarize_text("\n\n".join(summaries))
 
-    combined = "\n\n".join(summaries)
-    final = summarize_text(combined)
-    return {"type": "document", "input": path, "final_summary": final}
+    return jsonify({"filename": uploaded_file.filename, "final_summary": final_summary})
 
 
-def process_video(path: str, lang: str = "en") -> Dict[str, Any]:
-    tmpdir = tempfile.mkdtemp(prefix="vid_")
-    audio = os.path.join(tmpdir, "audio.wav")
-    extract_audio(path, audio)
-
-    trans = transcribe_locally(audio)
-    text = trans["text"]
-    chuncks = chunck_text(text)
-    summaries = []
-    for c in chuncks:
-        s = summarize_text(c)
-        summaries.append(s)
-
-    combined = "\n\n".join(summaries)
-    final = summarize_text(combined)
-    return {"type": "video", "input": path, "transcript": text, "final_summary": final}
-
-
-# ------------------------------------------------- CLI -------------------------------------------------------------
-
-
-def select_file():
-    if HEADLESS:
-        print("Running in headless mode — GUI file picker disabled.")
-        return None  # User must pass --input instead
-
-    # Local import of Tkinter only if not headless
-    import tkinter as tk
-    from tkinter import filedialog
-
-    root = tk.Tk()
-    root.withdraw()
-    file_path = filedialog.askopenfilename(
-        title="Select a video or document",
-        filetypes=[
-            ("All Supported", "*.mp4 *.mkv *.mov *.pdf *.txt *.docx"),
-            ("Videos", "*.mp4 *.mkv *.mov"),
-            ("Documents", "*.pdf *.txt *.docx"),
-        ],
-    )
-    return file_path
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="AI assistant that summarizes videos or documents."
-    )
-    parser.add_argument("--input", "-i", help="Input file path")
-    parser.add_argument("--type", "-t", choices=["video", "document"])
-    parser.add_argument("--lang", default="en", help="Language for Transcription")
-    parser.add_argument("--outdir", default="outputs", help="Output folder")
-    args = parser.parse_args()
-
-    # Headless-safe input
-    if not args.input:
-        if HEADLESS:
-            args.input = "samples/sample.pdf"
-            args.type = "document"
-            print(f"Headless mode: using default input file: {args.input}")
-        else:
-            args.input = select_file()
-            if not args.input:
-                print("No file selected. Exiting.")
-                sys.exit(1)
-
-    # Auto-detect type if not provided
-    if not args.type:
-        ext = Path(args.input).suffix.lower()
-        if ext in [".mp4", ".mkv", ".mov"]:
-            args.type = "video"
-        else:
-            args.type = "document"
-
-    Path(args.outdir).mkdir(parents=True, exist_ok=True)
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = Path(args.outdir) / f"{Path(args.input).stem}_{ts}_summary.json"
-
-    try:
-        if args.type == "video":
-            extracted_text = process_video(args.input, lang=args.lang)
-            result = {"final_summary": summarize_text(extracted_text)}
-        else:
-            extracted_text = process_document(args.input)
-            result = {"final_summary": summarize_text(extracted_text)}
-    except Exception as e:
-        print("Error: ", e)
-        sys.exit(1)
-
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-
-    print("\n=== FINAL SUMMARY ===\n")
-    print(result["final_summary"])
-    print(f"\nSaved to: {out_path}")
-
-
+# -------------------- Run server -------------------------
 if __name__ == "__main__":
-    main()
-
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
