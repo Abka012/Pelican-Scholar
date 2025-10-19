@@ -38,4 +38,4 @@ RUN pip install \
 ENV PYTHONUNBUFFERED=1
 
 # Default command (you can override with docker run arguments)
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["python", "assistant.py"]
