@@ -1,3 +1,4 @@
+// Copy of Code
 import React from 'react';
 import Header from '../components/Header';
 import NoteEditor from '../components/NoteEditor';

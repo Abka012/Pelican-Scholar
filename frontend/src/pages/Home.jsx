@@ -1,3 +1,4 @@
+// Copy of Code 
 import React from 'react';
 import Header from '../components/Header';
 import NoteList from '../components/NoteList';
@@ -12,11 +13,19 @@ const Home = ({
   onNewNote, 
   onToggleAI,
   onGenerateNote,
-  onSuggestTitle
+  onSuggestTitle,
+  onFileUpload,
+  summaryLength,
+  setSummaryLength
 }) => {
   return (
     <div className="home">
-      <Header onNewNote={onNewNote} onToggleAI={onToggleAI} />
+      <Header onNewNote={onNewNote}  
+              onToggleAI={onToggleAI} 
+              onFileUpload={onFileUpload}
+              summaryLength={summaryLength}
+              setSummaryLength={setSummaryLength}
+      />
       
       <div className="main-content">
         <div className="sidebar">

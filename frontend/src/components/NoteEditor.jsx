@@ -1,3 +1,4 @@
+// Copy of Code
 import React, { useState, useEffect } from 'react';
 import './NoteEditor.css';
 
