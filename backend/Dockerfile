@@ -25,7 +25,7 @@ COPY . /app
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir \
         flask \
-        flask-wtf \          # <-- Added this line
+        flask-cors \
         python-dotenv \
         PyPDF2 \
         python-docx \
@@ -34,7 +34,6 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
         whisper \
         huggingface-hub \
         requests
-
 # -------------------- Expose port --------------------
 EXPOSE 8000
 
