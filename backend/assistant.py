@@ -12,16 +12,21 @@ from transformers import pipeline
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 
-# -------------------- Load environment --------------------
+# -------------------- Load environment --------------
 load_dotenv()
 client = InferenceClient(provider="hf-inference", api_key=os.getenv("HF_TOKEN"))
 
-# -------------------- Flask app --------------------------
+# -------------------- Flask app ----------------------
 app = Flask(__name__)
 
 # Allow CORS for Vercel frontend + local dev
 CORS(
-    app, origins=["https://https://pelican-scholar.vercel.app", "http://localhost:3000"]
+    app,
+    origins=[
+        "https://pelican-scholar.vercel.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
 )
 
 # -------------------- Utility functions ------------------
@@ -62,43 +67,62 @@ def chunck_text(text: str, max_chars: int = 3000):
 
 
 def summarize_text(text: str) -> str:
-    result = client.summarization(
-        text,
-        model="Falconsai/text_summarization",
-    )
-    return result
+    try:
+        result = client.summarization(
+            text,
+            model="Falconsai/text_summarization",
+        )
+        return result
+    except Exception as e:
+        return f"Error summarizing: {str(e)}"
 
 
-# -------------------- API endpoints ----------------------
+# -------------------- API endpoints ------------------
 
 
 @app.route("/api/summarize", methods=["POST"])
 def summarize_file():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
 
-    uploaded_file = request.files["file"]
-    ext = Path(uploaded_file.filename).suffix.lower()
-    tmpdir = tempfile.mkdtemp()
-    file_path = Path(tmpdir) / uploaded_file.filename
-    uploaded_file.save(file_path)
+        uploaded_file = request.files["file"]
+        if uploaded_file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
 
-    # Read file content
-    if ext == ".pdf":
-        text = read_pdf_text(file_path)
-    elif ext == ".docx":
-        text = read_docx_text(file_path)
-    else:
-        text = read_text_file(file_path)
+        ext = Path(uploaded_file.filename).suffix.lower()
+        tmpdir = tempfile.mkdtemp()
+        file_path = Path(tmpdir) / uploaded_file.filename
+        uploaded_file.save(file_path)
 
-    chuncks = chunck_text(text)
-    summaries = [summarize_text(c) for c in chuncks]
-    final_summary = summarize_text("\n\n".join(summaries))
+        # Read file content
+        if ext == ".pdf":
+            text = read_pdf_text(file_path)
+        elif ext == ".docx":
+            text = read_docx_text(file_path)
+        else:
+            text = read_text_file(file_path)
 
-    return jsonify({"filename": uploaded_file.filename, "final_summary": final_summary})
+        if not text.strip():
+            return jsonify({"error": "No text found in the file"}), 400
+
+        chuncks = chunck_text(text)
+        summaries = [summarize_text(c) for c in chuncks]
+        final_summary = summarize_text("\n\n".join(summaries))
+
+        return jsonify(
+            {
+                "filename": uploaded_file.filename,
+                "final_summary": final_summary,
+                "text_length": len(text),
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-# -------------------- Root & Health endpoints ----------------------
+# -------------------- Root & Health endpoints ------------------
 
 
 @app.route("/", methods=["GET"])
@@ -111,6 +135,35 @@ def health():
     return jsonify({"status": "ok", "message": "API is running"})
 
 
-# -------------------- Run server -------------------------
+# --------------------- Notes endpoints -------------------
+
+
+@app.route("/api/notes", methods=["GET"])
+def get_all_notes():
+    # Return your notes data
+    return jsonify(data)
+
+
+@app.route("/api/notes", methods=["POST"])
+def create_note():
+    data = request.get_json()
+    # Create and return new note
+    return jsonify(data)
+
+
+@app.route("/api/notes/<int:id>", methods=["PUT"])
+def update_note(id):
+    data = request.get_json()
+    # Update and return note
+    return jsonify(data)
+
+
+@app.route("/api/notes/<int:id>", methods=["DELETE"])
+def delete_note(id):
+    # Delete note
+    return jsonify({"message": "Note deleted"})
+
+
+# -------------------- Run server ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
