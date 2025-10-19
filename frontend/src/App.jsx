@@ -1,29 +1,59 @@
 import React, { useState, useEffect } from 'react';
 import Home from './pages/Home';
 import Notes from './pages/Notes';
-import { getNotes, createNote, updateNote, deleteNote } from './services/notes';
+import { getNotes, createNote, updateNote, deleteNote, summarizeFile } from './services/notes';
 import './App.css';
 
-const App = () => {
-  const [currentPage, setCurrentPage] = useState('home');
+function App() {
+  // ---------- State ----------
   const [notes, setNotes] = useState([]);
-  const [selectedNote, setSelectedNote] = useState(null);
-  const [showAI, setShowAI] = useState(false);
-  const [editingNote, setEditingNote] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Add missing states
+  const [editingNote, setEditingNote] = useState(null);
+  const [selectedNote, setSelectedNote] = useState(null);
+  const [currentPage, setCurrentPage] = useState('home');
+  const [showAI, setShowAI] = useState(false);
+
+  // ---------- Load notes ----------
   useEffect(() => {
-    loadNotes();
+    fetchNotes();
   }, []);
 
-  const loadNotes = async () => {
+  const fetchNotes = async () => {
     try {
-      const loadedNotes = await getNotes();
-      setNotes(loadedNotes);
-    } catch (error) {
-      console.error('Failed to load notes:', error);
+      const data = await getNotes();
+      setNotes(data);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
     }
   };
 
+  // ---------- File Upload ----------
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      try {
+        const result = await summarizeFile(file);
+        const newNote = {
+          title: `Summary: ${result.filename}`,
+          content: result.final_summary,
+          createdAt: new Date().toISOString(),
+        };
+        const createdNote = await createNote(newNote);
+        setNotes(prev => [createdNote, ...prev]);
+        event.target.value = '';
+      } catch (error) {
+        console.error('Error summarizing file:', error);
+        alert('Error summarizing file: ' + error.message);
+      }
+    }
+  };
+
+  // ---------- Note management ----------
   const handleCreateNote = () => {
     setEditingNote(null);
     setCurrentPage('notes');
@@ -37,8 +67,8 @@ const App = () => {
       } else {
         savedNote = await createNote(noteData);
       }
-      
-      await loadNotes();
+
+      await fetchNotes(); // was loadNotes()
       setCurrentPage('home');
       setSelectedNote(savedNote);
     } catch (error) {
@@ -49,7 +79,7 @@ const App = () => {
   const handleDeleteNote = async (id) => {
     try {
       await deleteNote(id);
-      await loadNotes();
+      await fetchNotes(); // was loadNotes()
       if (selectedNote?.id === id) {
         setSelectedNote(null);
       }
@@ -62,26 +92,23 @@ const App = () => {
     setSelectedNote(note);
   };
 
+  // ---------- AI & Title features ----------
   const handleGenerateNote = async (prompt) => {
-    // This would integrate with an actual AI service
     console.log('Generating note with prompt:', prompt);
-    // Simulate API call
-    const mockResponse = `This is a generated note based on your prompt: "${prompt}". This 
-demonstrates how the AI assistant would work with real AI services.`;
+    const mockResponse = `This is a generated note based on your prompt: "${prompt}". This demonstrates how the AI assistant would work with real AI services.`;
+
     const newNote = {
       title: `AI Generated: ${prompt.substring(0, 20)}...`,
       content: mockResponse,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
+
     await createNote(newNote);
-    await loadNotes();
+    await fetchNotes(); // was loadNotes()
   };
 
   const handleSuggestTitle = async (suggestion) => {
-    // This would generate a title suggestion
-    console.log('Suggesting title for:', suggestion);
-    // Simulate title generation
     const mockTitle = `Thoughts on ${suggestion.substring(0, 15)}...`;
     setEditingNote({ title: mockTitle });
   };
@@ -96,6 +123,7 @@ demonstrates how the AI assistant would work with real AI services.`;
     setShowAI(!showAI);
   };
 
+  // ---------- Conditional render ----------
   if (currentPage === 'notes') {
     return (
       <Notes 
@@ -120,6 +148,6 @@ demonstrates how the AI assistant would work with real AI services.`;
       />
     </div>
   );
-};
+}
 
 export default App;
