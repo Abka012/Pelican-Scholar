@@ -1,0 +1,55 @@
+.note-editor {
+  padding: 1rem;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+  margin-bottom: 1rem;
+}
+
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.title-input {
+  font-size: 1.5rem;
+  font-weight: 700;
+  border: none;
+  padding: 0.5rem 0;
+  border-bottom: 2px solid #eee;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.title-input:focus {
+  border-color: #667eea;
+}
+
+.content-textarea {
+  min-height: 300px;
+  border: none;
+  padding: 1rem 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  outline: none;
+  resize: vertical;
+}
+
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+@media (max-width: 768px) {
+  .editor-actions {
+    flex-direction: column;
+  }
+  
+  .btn {
+    width: 100%;
+  }
+}
