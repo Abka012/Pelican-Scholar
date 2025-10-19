@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { summarizeFile } from "./api/summarizeFile";
 
 const SummarizeForm = () => {
   const [file, setFile] = useState(null);
@@ -14,29 +15,15 @@ const SummarizeForm = () => {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('summary_length', summaryLength);
-
     setLoading(true);
     setError('');
     setSummary('');
 
     try {
-      const response = await fetch('/api/summarize', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSummary(data.final_summary);
-      } else {
-        setError(data.error || 'Failed to summarize');
-      }
+      const result = await summarizeFile(file, summaryLength);
+      setSummary(result.final_summary);
     } catch (err) {
-      setError('Network error. Is the backend running?');
+      setError(err.message || 'Failed to summarize');
     } finally {
       setLoading(false);
     }
