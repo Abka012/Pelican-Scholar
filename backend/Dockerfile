@@ -1,33 +1,42 @@
-# Use slim Python
-FROM python:3.10-slim
+# -------------------- Base image --------------------
+FROM python:3.11-slim
 
-WORKDIR /app
+# -------------------- Set environment --------------------
+ENV PYTHONUNBUFFERED=1
+ENV LANG=C.UTF-8
+ENV PORT=8000
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# -------------------- Install system dependencies --------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    build-essential \
+    libsndfile1 \
     git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project files
+# -------------------- Set working directory --------------------
+WORKDIR /app
+
+# -------------------- Copy files --------------------
 COPY . /app
 
-# Upgrade pip
-RUN pip install --upgrade pip
+# -------------------- Install Python dependencies --------------------
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir \
+        flask \
+        flask-cors \
+        python-dotenv \
+        PyPDF2 \
+        python-docx \
+        transformers \
+        torch \
+        whisper \
+        huggingface-hub \
+        requests
 
-# Install Python dependencies
-RUN pip install \
-    python-dotenv \
-    PyPDF2 \
-    python-docx \
-    openai-whisper \
-    transformers \
-    torch \
-    requests \
-    huggingface_hub
+# -------------------- Expose port --------------------
+EXPOSE 8000
 
-# Set env variable for unbuffered output
-ENV PYTHONUNBUFFERED=1
-
-# Default entrypoint
-ENTRYPOINT ["python", "assistant.py"]
+# -------------------- Command to run --------------------
+CMD ["python", "assistant.py"]
